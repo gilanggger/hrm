@@ -3,7 +3,7 @@ import { ref, onMounted, onUnmounted, computed } from 'vue'
 import {
   Users, UserCheck, UserX, Clock3, AlarmClock,
   CalendarDays, Factory, TrendingUp, Award,
-  Maximize, Minimize, Wifi,
+  Maximize, Minimize, Wifi, AlertTriangle,
 } from 'lucide-vue-next'
 
 // ── Fullscreen ────────────────────────────────────────────────
@@ -52,15 +52,20 @@ function animCount(obj, key, target, duration = 1800, delay = 0) {
 
 // ── Stats data ────────────────────────────────────────────────
 const stats = [
-  { key:'hadir',     label:'Hadir Hari Ini', sub:'dari 352 pegawai', icon: UserCheck,    color:'text-emerald-700', bg:'bg-emerald-50',  border:'border-emerald-300', glow:'#d1fae5' },
-  { key:'terlambat', label:'Terlambat',       sub:'pegawai',          icon: AlarmClock,   color:'text-amber-700',   bg:'bg-amber-50',    border:'border-amber-300',   glow:'#fef3c7' },
-  { key:'izin',      label:'Izin / Sakit',    sub:'pegawai',          icon: CalendarDays, color:'text-sky-700',     bg:'bg-sky-50',      border:'border-sky-300',     glow:'#e0f2fe' },
-  { key:'alpha',     label:'Tidak Hadir',     sub:'alpha',            icon: UserX,        color:'text-red-700',     bg:'bg-red-50',      border:'border-red-300',     glow:'#fee2e2' },
-  { key:'shift',     label:'Shift Aktif',     sub:'shift berjalan',   icon: Factory,      color:'text-indigo-700',  bg:'bg-indigo-50',   border:'border-indigo-300',  glow:'#e0e7ff' },
-  { key:'total',     label:'Total Pegawai',   sub:'seluruh divisi',   icon: Users,        color:'text-blue-700',    bg:'bg-blue-50',     border:'border-blue-300',    glow:'#dbeafe' },
+  { key:'hadir',     label:'Hadir Hari Ini', sub:'dari 352 pegawai', icon: UserCheck,    color:'text-emerald-700', bg:'bg-emerald-50',  border:'border-emerald-300', glow:'#d1fae5', shape:'rounded-2xl' },
+  { key:'terlambat', label:'Terlambat',       sub:'pegawai',          icon: AlarmClock,   color:'text-amber-700',   bg:'bg-amber-50',    border:'border-amber-300',   glow:'#fef3c7', shape:'rounded-full' },
+  { key:'izin',      label:'Izin / Sakit',    sub:'pegawai',          icon: CalendarDays, color:'text-sky-700',     bg:'bg-sky-50',      border:'border-sky-300',     glow:'#e0f2fe', shape:'rounded-2xl' },
+  { key:'alpha',     label:'Tidak Hadir',     sub:'alpha',            icon: UserX,        color:'text-red-700',     bg:'bg-red-50',      border:'border-red-300',     glow:'#fee2e2', shape:'rounded-full' },
+  { key:'shift',     label:'Shift Aktif',     sub:'shift berjalan',   icon: Factory,      color:'text-indigo-700',  bg:'bg-indigo-50',   border:'border-indigo-300',  glow:'#e0e7ff', shape:'rounded-2xl' },
+  { key:'total',     label:'Total Pegawai',   sub:'seluruh divisi',   icon: Users,        color:'text-blue-700',    bg:'bg-blue-50',     border:'border-blue-300',    glow:'#dbeafe', shape:'rounded-full' },
 ]
 
 const attendanceRate = computed(() => Math.round((328 / 352) * 100))
+
+// ── Ring gauge (kartu "Hadir Hari Ini") — disinkronkan dengan rateDisplay ──
+const ringRadius = 34
+const ringCircumference = 2 * Math.PI * ringRadius
+const ringOffset = computed(() => ringCircumference * (1 - rateDisplay.value / 100))
 
 // ── Shifts ────────────────────────────────────────────────────
 const shifts = [
@@ -69,7 +74,15 @@ const shifts = [
   { key:'malam', name:'Shift Malam', time:'22:00 – 06:00', hadir:83,  total:92,  color:'from-violet-500 to-purple-400' },
 ]
 
-// ── Top attendance ─────────────────────────────────────────────
+// Deteksi shift yang sedang berjalan berdasarkan jam saat ini
+const currentShiftKey = computed(() => {
+  const h = now.value.getHours()
+  if (h >= 6 && h < 14) return 'pagi'
+  if (h >= 14 && h < 22) return 'siang'
+  return 'malam'
+})
+
+// ── Top attendance / Perlu perhatian (rotasi panel kanan) ──────
 const topAttendance = ref([
   { rank:1, name:'Andi Saputra',  division:'Produksi', time:'06:01' },
   { rank:2, name:'Budi Santoso',  division:'QC',       time:'06:03' },
@@ -77,6 +90,21 @@ const topAttendance = ref([
   { rank:4, name:'Fajar Nugroho', division:'Teknik',   time:'06:07' },
   { rank:5, name:'Joko Widodo',   division:'Teknik',   time:'06:10' },
 ])
+
+const latecomers = ref([
+  { rank:1, name:'Siti Marlina',  division:'Admin',    time:'08:14' },
+  { rank:2, name:'Hendro Wibowo', division:'Gudang',   time:'08:09' },
+  { rank:3, name:'Tono Prasetyo', division:'Produksi', time:'08:06' },
+  { rank:4, name:'Yusuf Maulana', division:'Teknik',   time:'08:03' },
+  { rank:5, name:'Dewi Anggraini',division:'QC',       time:'08:02' },
+])
+
+const rightPanelMode = ref('top') // 'top' | 'late'
+const rightPanelVisible = ref(true)
+const currentPanelList = computed(() => rightPanelMode.value === 'top' ? topAttendance.value : latecomers.value)
+const currentPanelTitle = computed(() => rightPanelMode.value === 'top' ? 'Absensi Tercepat' : 'Perlu Perhatian')
+const currentPanelIcon  = computed(() => rightPanelMode.value === 'top' ? Award : AlertTriangle)
+let panelTimer = null
 
 // ── Divisions ─────────────────────────────────────────────────
 const divisions = [
@@ -105,7 +133,7 @@ const quotes = [
   { text:'Kerja keras hari ini adalah fondasi kesuksesan esok hari.',           author:'Pabrik Gula Modern' },
   { text:'Keselamatan kerja adalah tanggung jawab kita bersama.',                author:'K3 Division' },
   { text:'Kualitas bukan kebetulan, ia adalah hasil dari usaha yang konsisten.', author:'QC Team' },
-  { text:'Bersama kita bisa mencapai lebih dari yang kita bayangkan.',           author:'HRD' },
+  { text:'Bersama kita bisa mencapai lebih dari yang kita bayangkan.',          author:'HRD' },
 ]
 const quoteIndex  = ref(0)
 let quoteTimer = null
@@ -171,6 +199,15 @@ onMounted(() => {
     quoteIndex.value = (quoteIndex.value + 1) % quotes.length
   }, 8000)
 
+  // Panel kanan: rotasi antara "Absensi Tercepat" dan "Perlu Perhatian"
+  panelTimer = setInterval(() => {
+    rightPanelVisible.value = false
+    setTimeout(() => {
+      rightPanelMode.value = rightPanelMode.value === 'top' ? 'late' : 'top'
+      rightPanelVisible.value = true
+    }, 400)
+  }, 9000)
+
   document.addEventListener('fullscreenchange', onFullscreenChange)
 })
 
@@ -178,21 +215,23 @@ onUnmounted(() => {
   clearInterval(clockTimer)
   clearInterval(tickerTimer)
   clearInterval(quoteTimer)
+  clearInterval(panelTimer)
   document.removeEventListener('fullscreenchange', onFullscreenChange)
 })
 </script>
 
 <template>
-  <div class="lobby-root min-h-screen bg-[#E8EDF5] text-slate-900 overflow-hidden flex flex-col select-none">
+  <div class="lobby-root min-h-screen bg-[#E8EDF5] text-slate-900 overflow-x-hidden flex flex-col select-none"
+       :class="isFullscreen ? 'overflow-y-hidden' : 'overflow-y-auto'">
 
     <!-- BACKGROUND -->
     <div class="fixed inset-0 pointer-events-none z-0">
       <div class="absolute inset-0 bg-grid opacity-[0.35]" />
       <!-- floating orbs dengan animasi -->
-      <div class="orb orb-1 absolute top-0 left-0 w-[600px] h-[600px] bg-blue-200/30 rounded-full blur-[160px]" />
-      <div class="orb orb-2 absolute bottom-0 right-0 w-[500px] h-[500px] bg-sky-200/20 rounded-full blur-[140px]" />
-      <div class="orb orb-3 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] bg-indigo-100/30 rounded-full blur-[120px]" />
-      <div class="orb orb-4 absolute top-1/3 right-1/4 w-[300px] h-[300px] bg-emerald-100/20 rounded-full blur-[100px]" />
+      <div class="orb orb-1 absolute top-0 left-0 w-[300px] sm:w-[450px] lg:w-[600px] h-[300px] sm:h-[450px] lg:h-[600px] bg-blue-200/30 rounded-full blur-[160px]" />
+      <div class="orb orb-2 absolute bottom-0 right-0 w-[260px] sm:w-[380px] lg:w-[500px] h-[260px] sm:h-[380px] lg:h-[500px] bg-sky-200/20 rounded-full blur-[140px]" />
+      <div class="orb orb-3 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[200px] sm:w-[300px] lg:w-[400px] h-[200px] sm:h-[300px] lg:h-[400px] bg-indigo-100/30 rounded-full blur-[120px]" />
+      <div class="orb orb-4 absolute top-1/3 right-1/4 w-[150px] sm:w-[220px] lg:w-[300px] h-[150px] sm:h-[220px] lg:h-[300px] bg-emerald-100/20 rounded-full blur-[100px]" />
     </div>
 
     <!-- SCAN LINE -->
@@ -200,39 +239,39 @@ onUnmounted(() => {
                 bg-gradient-to-r from-transparent via-blue-400/40 to-transparent" />
 
     <!-- HEADER -->
-    <header class="relative z-10 flex items-center justify-between gap-4 px-6 py-3
+    <header class="relative z-10 flex flex-col lg:flex-row items-center justify-between gap-3 lg:gap-4 px-4 sm:px-6 py-3
                    border-b-2 border-slate-300 header-bg flex-shrink-0 overflow-hidden">
 
       <!-- shimmer sweep di header -->
       <div class="header-shimmer absolute inset-0 pointer-events-none" />
 
       <!-- Logo -->
-      <div class="relative z-10 flex items-center gap-3 slide-in-left">
-        <div class="logo-icon w-12 h-12 rounded-2xl flex items-center justify-center shrink-0">
-          <Factory :size="24" class="text-white" />
+      <div class="relative z-10 flex items-center gap-3 slide-in-left order-1">
+        <div class="logo-icon w-10 h-10 sm:w-12 sm:h-12 rounded-2xl flex items-center justify-center shrink-0">
+          <Factory :size="22" class="text-white" />
         </div>
         <div>
-          <h1 class="text-xl font-black tracking-[0.12em] uppercase text-slate-900 leading-tight">HRM System</h1>
-          <p class="text-blue-600 text-base tracking-widest uppercase font-bold leading-tight">Pabrik Gula Modern</p>
+          <h1 class="text-base sm:text-lg lg:text-xl font-black tracking-[0.12em] uppercase text-slate-900 leading-tight">HRM System</h1>
+          <p class="text-blue-600 text-sm sm:text-base tracking-widest uppercase font-bold leading-tight">Pabrik Gula Modern</p>
         </div>
       </div>
 
       <!-- Clock -->
-      <div class="relative z-10 text-center fade-in-down">
-        <div class="text-5xl font-black tabular-nums tracking-tight text-slate-900 leading-none clock-glow">
+      <div class="relative z-10 text-center fade-in-down order-3 lg:order-2">
+        <div class="text-3xl sm:text-4xl lg:text-5xl font-black tabular-nums tracking-tight text-slate-900 leading-none clock-glow">
           {{ timeStr }}
         </div>
-        <div class="text-slate-600 text-base mt-1 tracking-wide capitalize font-semibold">{{ dateStr }}</div>
+        <div class="text-slate-600 text-sm sm:text-base mt-1 tracking-wide capitalize font-semibold">{{ dateStr }}</div>
       </div>
 
       <!-- Live badge + fullscreen -->
-      <div class="relative z-10 flex items-center gap-3 slide-in-right">
+      <div class="relative z-10 flex items-center gap-3 slide-in-right order-2 lg:order-3">
         <div class="flex items-center gap-2 px-3 py-2 rounded-xl border-2 border-emerald-300 bg-emerald-50 live-badge-pulse">
           <div class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
           <Wifi :size="16" class="text-emerald-700" />
-          <span class="text-emerald-800 text-base font-black tracking-widest uppercase">LIVE</span>
+          <span class="text-emerald-800 text-sm sm:text-base font-black tracking-widest uppercase">LIVE</span>
         </div>
-        <button @click="toggleFullscreen" class="light-btn w-11 h-11 rounded-xl flex items-center justify-center">
+        <button @click="toggleFullscreen" class="light-btn w-10 h-10 sm:w-11 sm:h-11 rounded-xl flex items-center justify-center">
           <Maximize v-if="!isFullscreen" :size="18" class="text-slate-600" />
           <Minimize v-else :size="18" class="text-slate-600" />
         </button>
@@ -240,87 +279,142 @@ onUnmounted(() => {
     </header>
 
     <!-- RATE BANNER -->
-    <div class="relative z-10 px-6 py-2.5 border-b-2 border-slate-300 flex-shrink-0"
+    <div class="relative z-10 px-4 sm:px-6 py-2.5 border-b-2 border-slate-300 flex-shrink-0"
          style="background:rgba(255,255,255,0.92);backdrop-filter:blur(12px)">
-      <div class="flex items-center gap-5">
-        <div class="flex items-center gap-2 shrink-0">
+      <div class="flex flex-col sm:flex-row items-center gap-2.5 sm:gap-5">
+        <div class="flex items-center gap-2 shrink-0 self-start sm:self-auto">
           <TrendingUp :size="18" class="text-blue-600 trending-bounce" />
-          <span class="text-slate-700 text-base font-black tracking-widest uppercase">Tingkat Kehadiran</span>
+          <span class="text-slate-700 text-sm sm:text-base font-black tracking-widest uppercase">Tingkat Kehadiran</span>
         </div>
-        <div class="flex-1">
-          <div class="h-4 rounded-full bg-slate-200 overflow-hidden relative">
-            <div class="h-full rounded-full rate-fill-anim shimmer-bar"
-                 style="background:linear-gradient(90deg,#1d4ed8,#0ea5e9,#06b6d4)" />
+        <div class="flex-1 w-full flex items-center gap-3">
+          <div class="flex-1 h-3.5 sm:h-4 rounded-full bg-slate-200 overflow-hidden relative">
+            <div class="h-full rounded-full shimmer-bar"
+                 :style="`background:linear-gradient(90deg,#1d4ed8,#0ea5e9,#06b6d4); --bar-w:${attendanceRate}%`" />
+            <span class="absolute top-0 bottom-0 w-px bg-white/50" style="left:25%" />
+            <span class="absolute top-0 bottom-0 w-px bg-white/50" style="left:50%" />
+            <span class="absolute top-0 bottom-0 w-px bg-white/50" style="left:75%" />
           </div>
-        </div>
-        <div class="text-4xl font-black tabular-nums text-blue-700 shrink-0 rate-num">
-          {{ rateDisplay }}%
+          <div class="text-2xl sm:text-3xl lg:text-4xl font-black tabular-nums text-blue-700 shrink-0 rate-num">
+            {{ rateDisplay }}%
+          </div>
         </div>
       </div>
     </div>
 
     <!-- MAIN -->
-    <div class="relative z-10 flex-1 grid grid-cols-12 gap-3 p-4 min-h-0">
+    <div class="relative z-10 flex-1 grid grid-cols-1 lg:grid-cols-12 gap-3 p-3 sm:p-4"
+         :class="isFullscreen ? 'lg:min-h-0' : ''">
 
       <!-- LEFT -->
-      <div class="col-span-8 flex flex-col gap-3 min-h-0">
+      <div class="lg:col-span-8 flex flex-col gap-3 min-h-0">
 
-        <!-- Stat Cards -->
-        <div class="grid grid-cols-3 gap-3">
+        <!-- Stat Cards (bento: kartu unggulan + total di baris 1, detail di baris 2) -->
+        <div class="grid grid-cols-3 gap-2.5 sm:gap-3">
+
+          <!-- Featured: Hadir Hari Ini (ring gauge, disinkron dgn rate bar) -->
+          <div class="col-span-2 stat-card rounded-2xl p-3 sm:p-4 border-2 bg-emerald-50 border-emerald-300
+                      flex items-center gap-3 sm:gap-4 cursor-default relative overflow-hidden"
+               :class="statsVisible ? 'stat-visible' : 'stat-hidden'">
+            <div class="absolute -bottom-4 -right-4 w-20 h-20 rounded-full blur-2xl opacity-50 pointer-events-none" style="background:#d1fae5" />
+            <div class="card-shine absolute inset-0 pointer-events-none" />
+            <svg viewBox="0 0 80 80" class="w-14 h-14 sm:w-[68px] sm:h-[68px] shrink-0 relative z-10 -rotate-90">
+              <circle cx="40" cy="40" :r="ringRadius" fill="none" stroke="#d1fae5" stroke-width="8" />
+              <circle cx="40" cy="40" :r="ringRadius" fill="none" stroke="#10b981" stroke-width="8" stroke-linecap="round"
+                      :stroke-dasharray="ringCircumference" :stroke-dashoffset="ringOffset" />
+            </svg>
+            <div class="relative z-10 min-w-0">
+              <div class="text-2xl sm:text-3xl lg:text-4xl font-black tabular-nums text-slate-900 leading-none">
+                {{ displayVals.hadir }}
+              </div>
+              <div class="text-xs sm:text-base font-black mt-1 leading-tight text-emerald-700">Hadir Hari Ini</div>
+              <div class="hidden sm:block text-sm text-slate-600 font-semibold mt-0.5">dari 352 pegawai · {{ rateDisplay }}%</div>
+            </div>
+          </div>
+
+          <!-- Total Pegawai -->
           <div
-            v-for="(item, i) in stats" :key="item.key"
-            class="stat-card rounded-2xl p-4 border-2 flex items-center gap-3 cursor-default relative overflow-hidden"
+            class="stat-card rounded-2xl p-3 sm:p-4 border-2 flex flex-col items-start justify-center gap-1.5 cursor-default relative overflow-hidden"
+            :class="['bg-blue-50','border-blue-300', statsVisible ? 'stat-visible' : 'stat-hidden']"
+            style="animation-delay:80ms"
+          >
+            <div class="absolute -bottom-4 -right-4 w-16 h-16 rounded-full blur-2xl opacity-50 pointer-events-none" style="background:#dbeafe" />
+            <div class="card-shine absolute inset-0 pointer-events-none" />
+            <div class="w-9 h-9 sm:w-11 sm:h-11 rounded-full flex items-center justify-center shrink-0 relative z-10
+                        bg-white shadow-sm border border-slate-200 icon-bounce-in" style="animation-delay:280ms">
+              <Users :size="20" class="text-blue-700" />
+            </div>
+            <div class="relative z-10 min-w-0">
+              <div class="text-2xl sm:text-3xl lg:text-4xl font-black tabular-nums text-slate-900 leading-none">
+                {{ displayVals.total }}
+              </div>
+              <div class="text-xs sm:text-base font-black mt-1 leading-tight text-blue-700 truncate">Total Pegawai</div>
+            </div>
+          </div>
+
+          <!-- Detail stats (terlambat / izin / alpha / shift) -->
+          <div
+            v-for="(item, i) in stats.filter(s => !['hadir','total','shift'].includes(s.key))" :key="item.key"
+            class="col-span-1 stat-card rounded-2xl p-3 sm:p-4 border-2 flex items-center gap-2.5 sm:gap-3 cursor-default relative overflow-hidden"
             :class="[item.bg, item.border, statsVisible ? 'stat-visible' : 'stat-hidden']"
-            :style="`animation-delay:${i * 80}ms`"
+            :style="`animation-delay:${160 + i * 80}ms`"
           >
             <!-- glow blob -->
-            <div class="absolute -bottom-4 -right-4 w-20 h-20 rounded-full blur-2xl opacity-50 pointer-events-none"
+            <div class="absolute -bottom-4 -right-4 w-16 sm:w-20 h-16 sm:h-20 rounded-full blur-2xl opacity-50 pointer-events-none"
                  :style="`background:${item.glow}`" />
             <!-- shimmer overlay on hover -->
             <div class="card-shine absolute inset-0 pointer-events-none" />
 
-            <div class="w-11 h-11 rounded-xl flex items-center justify-center shrink-0 relative z-10
+            <div class="w-9 h-9 sm:w-11 sm:h-11 flex items-center justify-center shrink-0 relative z-10
                         bg-white shadow-sm border border-slate-200 icon-bounce-in"
-                 :style="`animation-delay:${i*80 + 200}ms`">
-              <component :is="item.icon" :size="22" :class="item.color" />
+                 :class="item.shape"
+                 :style="`animation-delay:${240 + i*80}ms`">
+              <component :is="item.icon" :size="20" :class="item.color" />
             </div>
             <div class="relative z-10 min-w-0">
-              <div class="text-4xl font-black tabular-nums text-slate-900 leading-none">
+              <div class="text-2xl sm:text-3xl lg:text-4xl font-black tabular-nums text-slate-900 leading-none">
                 {{ displayVals[item.key] }}
               </div>
-              <div class="text-base font-black mt-1 leading-tight truncate" :class="item.color">{{ item.label }}</div>
-              <div class="text-sm text-slate-600 font-semibold mt-0.5">{{ item.sub }}</div>
+              <div class="text-xs sm:text-base font-black mt-1 leading-tight truncate" :class="item.color">{{ item.label }}</div>
+              <div class="hidden sm:block text-sm text-slate-600 font-semibold mt-0.5">{{ item.sub }}</div>
             </div>
           </div>
         </div>
 
         <!-- Shift -->
-        <div class="light-card rounded-2xl p-4 flex-1 min-h-0"
-             :class="shiftsVisible ? 'section-visible' : 'section-hidden'">
+        <div class="light-card rounded-2xl p-3 sm:p-4"
+             :class="[shiftsVisible ? 'section-visible' : 'section-hidden', isFullscreen ? 'lg:flex-1 lg:min-h-0' : '']">
           <div class="flex items-center gap-2 mb-3">
+            <span class="tape-accent" />
             <Clock3 :size="18" class="text-blue-600 spin-icon" />
-            <h2 class="text-base font-black text-slate-700 uppercase tracking-widest">Status Shift Aktif</h2>
+            <h2 class="text-sm sm:text-base font-black text-slate-700 uppercase tracking-widest">Status Shift Aktif</h2>
           </div>
-          <div class="grid grid-cols-3 gap-3 h-[calc(100%-2.5rem)]">
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3" :class="isFullscreen ? 'lg:h-[calc(100%-2.5rem)]' : ''">
             <div
               v-for="(shift, i) in shifts" :key="shift.key"
-              class="inner-card rounded-xl p-4 flex flex-col justify-between shift-card-enter"
+              class="inner-card rounded-xl p-3 sm:p-4 flex flex-col justify-between shift-card-enter relative"
+              :class="shift.key === currentShiftKey ? 'shift-active-ring' : ''"
               :style="`animation-delay:${300 + i*120}ms`"
             >
+              <span v-if="shift.key === currentShiftKey"
+                    class="absolute -top-2.5 right-3 flex items-center gap-1 px-2 py-1 rounded-full border-2
+                           border-blue-300 bg-blue-50 text-blue-800 text-[10px] sm:text-xs font-black uppercase tracking-wide shift-live-badge">
+                <span class="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse" /> Sedang Berjalan
+              </span>
               <div>
+                <div class="h-1.5 w-12 rounded-full bg-gradient-to-r mb-2.5" :class="shift.color" />
                 <div class="flex items-center justify-between mb-1">
-                  <span class="text-lg font-black text-slate-800">{{ shift.name }}</span>
+                  <span class="text-base sm:text-lg font-black text-slate-800">{{ shift.name }}</span>
                   <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shrink-0"
                         :style="`animation-delay:${i*300}ms`" />
                 </div>
-                <div class="text-base text-slate-600 font-semibold mb-2">{{ shift.time }}</div>
-                <div class="text-5xl font-black text-slate-900 tabular-nums leading-none mb-1">
+                <div class="text-sm sm:text-base text-slate-600 font-semibold mb-2">{{ shift.time }}</div>
+                <div class="text-3xl sm:text-4xl lg:text-5xl font-black text-slate-900 tabular-nums leading-none mb-1">
                   {{ shiftDisplay[shift.key] }}
                 </div>
-                <div class="text-base text-slate-600 font-semibold">dari {{ shift.total }} pegawai</div>
+                <div class="text-sm sm:text-base text-slate-600 font-semibold">dari {{ shift.total }} pegawai</div>
               </div>
               <div>
-                <div class="flex justify-between text-base mb-1.5">
+                <div class="flex justify-between text-sm sm:text-base mb-1.5">
                   <span class="text-slate-600 font-semibold">Kehadiran</span>
                   <span class="text-slate-800 font-black">{{ Math.round(shift.hadir/shift.total*100) }}%</span>
                 </div>
@@ -335,28 +429,36 @@ onUnmounted(() => {
         </div>
 
         <!-- Divisions -->
-        <div class="light-card rounded-2xl p-4"
+        <div class="light-card rounded-2xl p-3 sm:p-4"
              :class="divVisible ? 'section-visible' : 'section-hidden'">
           <div class="flex items-center gap-2 mb-3">
+            <span class="tape-accent" />
             <Users :size="18" class="text-blue-600" />
-            <h2 class="text-base font-black text-slate-700 uppercase tracking-widest">Kehadiran per Divisi</h2>
+            <h2 class="text-sm sm:text-base font-black text-slate-700 uppercase tracking-widest">Kehadiran per Divisi</h2>
           </div>
-          <div class="space-y-2.5">
+          <div class="space-y-1.5">
             <div
               v-for="(div, i) in divisions" :key="div.name"
-              class="flex items-center gap-4 div-row-enter"
+              class="flex items-center gap-2 sm:gap-3 div-row-enter rounded-lg px-1.5 py-1.5"
+              :class="i % 2 === 1 ? 'bg-slate-50/70' : ''"
               :style="`animation-delay:${500 + i*100}ms`"
             >
-              <div class="w-24 text-base text-slate-700 shrink-0 font-bold">{{ div.name }}</div>
-              <div class="flex-1 h-3 rounded-full bg-slate-200 overflow-hidden">
+              <div class="flex items-center gap-2 w-20 sm:w-28 shrink-0">
+                <div class="w-6 h-6 sm:w-7 sm:h-7 rounded-full flex items-center justify-center text-white text-[11px] sm:text-xs
+                            font-black shrink-0 bg-gradient-to-br" :class="div.color">
+                  {{ div.name.charAt(0) }}
+                </div>
+                <span class="text-sm sm:text-base text-slate-700 font-bold truncate">{{ div.name }}</span>
+              </div>
+              <div class="flex-1 h-2.5 sm:h-3 rounded-full bg-slate-200 overflow-hidden">
                 <div class="h-full rounded-full bg-gradient-to-r bar-fill shimmer-bar"
                      :class="div.color"
                      :style="`--bar-w:${Math.round(div.hadir/div.total*100)}%; animation-delay:${600 + i*120}ms`" />
               </div>
-              <div class="text-base font-black text-slate-800 tabular-nums shrink-0 w-20 text-right">
+              <div class="text-sm sm:text-base font-black text-slate-800 tabular-nums shrink-0 w-14 sm:w-20 text-right">
                 {{ div.hadir }}<span class="text-slate-600 font-bold">/{{ div.total }}</span>
               </div>
-              <div class="text-base font-bold text-slate-700 w-12 text-right shrink-0">
+              <div class="text-xs sm:text-base font-bold text-slate-700 w-10 sm:w-12 text-right shrink-0">
                 {{ Math.round(div.hadir/div.total*100) }}%
               </div>
             </div>
@@ -365,69 +467,79 @@ onUnmounted(() => {
       </div>
 
       <!-- RIGHT -->
-      <div class="col-span-4 flex flex-col gap-3 min-h-0">
+      <div class="lg:col-span-4 flex flex-col gap-3 min-h-0">
 
-        <!-- Top 5 -->
-        <div class="light-card rounded-2xl p-4 flex-1 min-h-0">
-          <div class="flex items-center gap-2 mb-3">
-            <Award :size="18" class="text-amber-600 trophy-bounce" />
-            <h2 class="text-base font-black text-slate-700 uppercase tracking-widest">Absensi Tercepat</h2>
-          </div>
-          <div class="space-y-2">
-            <div
-              v-for="(item, i) in topAttendance" :key="item.rank"
-              class="inner-card flex items-center gap-3 rounded-xl px-3 py-2.5 group top-item-enter"
-              :style="`animation-delay:${topVisible ? 400 + i*110 : 0}ms`"
-              :class="topVisible ? '' : 'opacity-0'"
-            >
-              <div class="w-10 h-10 rounded-xl flex items-center justify-center text-base font-black border-2 shrink-0"
-                   :class="rankColor(item.rank)">
-                {{ item.rank }}
-              </div>
-              <div class="flex-1 min-w-0">
-                <div class="text-base font-bold text-slate-800 truncate group-hover:text-blue-700 transition-colors">
-                  {{ item.name }}
-                </div>
-                <div class="text-sm text-slate-600 font-semibold">{{ item.division }}</div>
-              </div>
-              <div class="px-3 py-1.5 rounded-xl bg-emerald-100 border-2 border-emerald-300
-                          text-emerald-800 font-black text-base tabular-nums shrink-0 time-badge">
-                {{ item.time }}
-              </div>
+        <!-- Top 5 / Perlu Perhatian (rotasi otomatis) -->
+        <div class="light-card rounded-2xl p-3 sm:p-4" :class="isFullscreen ? 'lg:flex-1 lg:min-h-0' : ''">
+          <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center gap-2">
+              <span class="tape-accent" />
+              <component :is="currentPanelIcon" :size="18"
+                         :class="rightPanelMode === 'top' ? 'text-amber-600 trophy-bounce' : 'text-red-600 alert-shake'" />
+              <h2 class="text-sm sm:text-base font-black text-slate-700 uppercase tracking-widest">{{ currentPanelTitle }}</h2>
+            </div>
+            <div class="flex items-center gap-1">
+              <span class="w-1.5 h-1.5 rounded-full" :class="rightPanelMode === 'top' ? 'bg-amber-500' : 'bg-slate-300'" />
+              <span class="w-1.5 h-1.5 rounded-full" :class="rightPanelMode === 'late' ? 'bg-red-500' : 'bg-slate-300'" />
             </div>
           </div>
+          <Transition name="panel-fade" mode="out-in">
+            <div v-if="rightPanelVisible" :key="rightPanelMode" class="space-y-2">
+              <div
+                v-for="(item, i) in currentPanelList" :key="item.rank"
+                class="inner-card flex items-center gap-3 rounded-xl px-3 py-2.5 group top-item-enter"
+                :style="`animation-delay:${topVisible ? 400 + i*110 : 0}ms`"
+                :class="topVisible ? '' : 'opacity-0'"
+              >
+                <div class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center text-sm sm:text-base font-black border-2 shrink-0"
+                     :class="rightPanelMode === 'top' ? rankColor(item.rank) : 'text-red-700 bg-red-100 border-red-400'">
+                  {{ item.rank }}
+                </div>
+                <div class="flex-1 min-w-0">
+                  <div class="text-sm sm:text-base font-bold text-slate-800 truncate group-hover:text-blue-700 transition-colors">
+                    {{ item.name }}
+                  </div>
+                  <div class="text-xs sm:text-sm text-slate-600 font-semibold">{{ item.division }}</div>
+                </div>
+                <div class="px-2.5 sm:px-3 py-1.5 rounded-xl border-2 font-black text-sm sm:text-base tabular-nums shrink-0 time-badge"
+                     :class="rightPanelMode === 'top' ? 'bg-emerald-100 border-emerald-300 text-emerald-800' : 'bg-amber-100 border-amber-300 text-amber-800'">
+                  {{ item.time }}
+                </div>
+              </div>
+            </div>
+          </Transition>
         </div>
 
         <!-- Quote -->
-        <div class="quote-card rounded-2xl p-5 relative overflow-hidden flex-shrink-0">
-          <div class="absolute top-2 right-4 text-7xl font-black text-blue-400/40 leading-none select-none quote-mark-float">"</div>
+        <div class="quote-card rounded-2xl p-4 sm:p-5 relative overflow-hidden flex-shrink-0">
+          <div class="absolute top-2 right-4 text-6xl sm:text-7xl font-black text-blue-400/40 leading-none select-none quote-mark-float">"</div>
           <div class="absolute -bottom-6 -left-6 w-32 h-32 rounded-full bg-blue-100/60 blur-2xl pointer-events-none orb orb-1" />
           <Transition name="quote-fade" mode="out-in">
             <div :key="quoteIndex" class="relative z-10">
-              <p class="text-slate-800 text-base leading-relaxed font-semibold italic">"{{ currentQuote.text }}"</p>
-              <p class="text-blue-700 text-base mt-2 font-black tracking-wide">— {{ currentQuote.author }}</p>
+              <p class="text-slate-800 text-sm sm:text-base leading-relaxed font-semibold italic">"{{ currentQuote.text }}"</p>
+              <p class="text-blue-700 text-sm sm:text-base mt-2 font-black tracking-wide">— {{ currentQuote.author }}</p>
             </div>
           </Transition>
         </div>
 
         <!-- Summary -->
-        <div class="light-card rounded-2xl p-4 flex-shrink-0">
-          <div class="grid grid-cols-2 gap-3">
-            <div class="summary-item rounded-xl p-3 text-center bg-emerald-50 border-2 border-emerald-300 pop-in" style="animation-delay:0.7s">
-              <div class="text-4xl font-black text-emerald-800 tabular-nums leading-none">93%</div>
-              <div class="text-base text-emerald-700 mt-1 font-black">Kehadiran</div>
+        <div class="light-card rounded-2xl p-3 sm:p-4 flex-shrink-0">
+          <div class="grid grid-cols-2 gap-2.5 sm:gap-3">
+            <div class="summary-item rounded-xl p-2.5 sm:p-3 text-center bg-emerald-50 border-2 border-emerald-300 pop-in" style="animation-delay:0.7s">
+              <div class="text-2xl sm:text-3xl lg:text-4xl font-black text-emerald-800 tabular-nums leading-none">93%</div>
+              <div class="text-xs sm:text-base text-emerald-700 mt-1 font-black">Kehadiran</div>
             </div>
-            <div class="summary-item rounded-xl p-3 text-center bg-blue-50 border-2 border-blue-300 pop-in" style="animation-delay:0.85s">
-              <div class="text-4xl font-black text-blue-800 tabular-nums leading-none">3</div>
-              <div class="text-base text-blue-700 mt-1 font-black">Shift Aktif</div>
+            <div class="summary-item rounded-xl p-2.5 sm:p-3 text-center bg-blue-50 border-2 border-blue-300 pop-in" style="animation-delay:0.85s">
+              <div class="text-2xl sm:text-3xl lg:text-4xl font-black text-blue-800 tabular-nums leading-none">3</div>
+              <div class="text-xs sm:text-base text-blue-700 mt-1 font-black">Shift Aktif</div>
             </div>
-            <div class="summary-item rounded-xl p-3 text-center bg-amber-50 border-2 border-amber-300 pop-in" style="animation-delay:1s">
-              <div class="text-4xl font-black text-amber-800 tabular-nums leading-none">8</div>
-              <div class="text-base text-amber-700 mt-1 font-black">Terlambat</div>
+            <div class="summary-item rounded-xl p-2.5 sm:p-3 text-center bg-amber-50 border-2 border-amber-300 pop-in" style="animation-delay:1s">
+              <div class="text-2xl sm:text-3xl lg:text-4xl font-black text-amber-800 tabular-nums leading-none">8</div>
+              <div class="text-xs sm:text-base text-amber-700 mt-1 font-black">Terlambat</div>
             </div>
-            <div class="summary-item rounded-xl p-3 text-center bg-indigo-50 border-2 border-indigo-300 pop-in" style="animation-delay:1.15s">
-              <div class="text-3xl font-black text-indigo-800 tabular-nums leading-none">245JT</div>
-              <div class="text-base text-indigo-700 mt-1 font-black">Payroll</div>
+            <div class="summary-item rounded-xl p-2.5 sm:p-3 text-center bg-indigo-50 border-2 border-indigo-300 pop-in" style="animation-delay:1.15s">
+              <div class="text-xl sm:text-2xl lg:text-3xl font-black text-indigo-800 tabular-nums leading-none">245JT</div>
+              <div class="text-xs sm:text-base text-indigo-700 mt-1 font-black">Payroll</div>
             </div>
           </div>
         </div>
@@ -435,21 +547,21 @@ onUnmounted(() => {
     </div>
 
     <!-- TICKER -->
-    <footer class="relative z-10 border-t-2 border-slate-300 px-6 py-3 flex items-center gap-4 flex-shrink-0"
+    <footer class="relative z-10 border-t-2 border-slate-300 px-4 sm:px-6 py-3 flex items-center gap-3 sm:gap-4 flex-shrink-0"
             style="background:rgba(255,255,255,0.97);backdrop-filter:blur(20px)">
-      <div class="flex items-center gap-2 shrink-0 px-3 py-1.5 rounded-lg border-2 border-blue-300 bg-blue-50">
+      <div class="flex items-center gap-2 shrink-0 px-2.5 sm:px-3 py-1.5 rounded-lg border-2 border-blue-300 bg-blue-50">
         <div class="w-2.5 h-2.5 rounded-full bg-blue-600 animate-pulse" />
-        <span class="text-blue-800 text-base font-black tracking-widest uppercase">Info</span>
+        <span class="text-blue-800 text-sm sm:text-base font-black tracking-widest uppercase">Info</span>
       </div>
       <div class="flex-1 overflow-hidden h-7 flex items-center relative">
         <Transition name="ticker-fade">
           <p v-if="tickerVisible" :key="tickerIndex"
-             class="text-slate-800 text-base whitespace-nowrap font-semibold absolute">
+             class="text-slate-800 text-sm sm:text-base whitespace-nowrap font-semibold absolute">
             {{ ticker[tickerIndex] }}
           </p>
         </Transition>
       </div>
-      <div class="text-slate-600 text-base font-bold shrink-0">HRM Pabrik Gula Modern © 2026</div>
+      <div class="hidden md:block text-slate-600 text-sm sm:text-base font-bold shrink-0">HRM Pabrik Gula Modern © 2026</div>
     </footer>
 
   </div>
@@ -569,13 +681,6 @@ onUnmounted(() => {
   to   { opacity:1; transform:scale(1); }
 }
 
-/* ── Rate bar fill + shimmer ── */
-.rate-fill-anim {
-  animation: rateFill 2s cubic-bezier(0.22,1,0.36,1) 0.5s both;
-  width:0;
-}
-@keyframes rateFill { to { width:93%; } }
-
 /* ── Rate number ── */
 .rate-num { animation: rateNumIn 0.5s ease 0.4s both; }
 @keyframes rateNumIn { from{opacity:0;transform:scale(0.7)} to{opacity:1;transform:scale(1)} }
@@ -589,6 +694,7 @@ onUnmounted(() => {
 
 /* ── Shimmer on bars ── */
 .shimmer-bar {
+  width:0;
   background-size:200% 100%;
   animation:
     barFill    1.6s cubic-bezier(0.22,1,0.36,1) both,
@@ -678,6 +784,33 @@ onUnmounted(() => {
   80%      { transform:rotate(4deg); }
 }
 
+/* ── Alert shake (panel "Perlu Perhatian") ── */
+.alert-shake { animation: alertShake 2.2s ease-in-out infinite; }
+@keyframes alertShake {
+  0%,100% { transform:rotate(0); }
+  10%      { transform:rotate(-10deg); }
+  20%      { transform:rotate(10deg); }
+  30%      { transform:rotate(-6deg); }
+  40%      { transform:rotate(6deg); }
+  50%      { transform:rotate(0); }
+}
+
+/* ── Tape accent (motif "pita pabrik" — pakai warna biru yang sudah ada) ── */
+.tape-accent {
+  height: 4px;
+  width: 28px;
+  border-radius: 4px;
+  flex-shrink: 0;
+  background: repeating-linear-gradient(45deg, #1d4ed8 0 5px, #bfdbfe 5px 10px);
+}
+
+/* ── Shift yang sedang berjalan ── */
+.shift-active-ring {
+  box-shadow: 0 0 0 2px rgba(29,78,216,0.35), 0 8px 24px rgba(29,78,216,0.15);
+  border-color: rgba(29,78,216,0.35) !important;
+}
+.shift-live-badge { animation: livePulse 3s ease-in-out infinite; }
+
 /* ── Time badge ── */
 .time-badge { animation: timePing 4s ease-in-out infinite; }
 @keyframes timePing {
@@ -716,8 +849,20 @@ onUnmounted(() => {
 .quote-fade-enter-from  { opacity:0; transform:translateY(12px) scale(0.98); }
 .quote-fade-leave-to    { opacity:0; transform:translateY(-12px) scale(0.98); }
 
+/* ── Right panel rotation transition ── */
+.panel-fade-enter-active,.panel-fade-leave-active { transition:all 0.4s cubic-bezier(0.22,1,0.36,1); }
+.panel-fade-enter-from  { opacity:0; transform:translateY(10px); }
+.panel-fade-leave-to    { opacity:0; transform:translateY(-10px); }
+
 /* ── Ticker transition ── */
 .ticker-fade-enter-active,.ticker-fade-leave-active { transition:all 0.45s cubic-bezier(0.22,1,0.36,1); }
 .ticker-fade-enter-from  { opacity:0; transform:translateX(30px); }
 .ticker-fade-leave-to    { opacity:0; transform:translateX(-30px); }
+
+/* ── Reduced motion ── */
+@media (prefers-reduced-motion: reduce) {
+  .orb, .scan-line, .header-shimmer, .logo-icon, .clock-glow, .live-badge-pulse,
+  .trending-bounce, .trophy-bounce, .alert-shake, .time-badge, .quote-card,
+  .quote-mark-float, .shimmer-bar { animation: none !important; }
+}
 </style>
