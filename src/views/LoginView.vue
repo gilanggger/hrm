@@ -5,6 +5,7 @@ import {
   Activity, Database, Shield, Cpu,
 } from 'lucide-vue-next'
 import { useRouter } from 'vue-router'
+import { users } from './Users.js' // sesuaikan path sesuai struktur folder Anda
 
 const router = useRouter()
 
@@ -14,6 +15,7 @@ const password     = ref('')
 const remember     = ref(false)
 const showPassword = ref(false)
 const loading      = ref(false)
+const errorMsg     = ref('')
 
 /* ─── Rotating Text ─── */
 const currentText = ref(0)
@@ -43,15 +45,34 @@ const strengthColor = computed(() => {
   return 'bg-emerald-400'
 })
 
-/* ─── Login Handler ─── */
+/* ─── Login Handler ───
+   Validasi terhadap daftar users di data/users.js (bukan hardcode admin/admin)
+*/
 const handleLogin = async () => {
   loading.value = true
+  errorMsg.value = ''
+
   setTimeout(() => {
     loading.value = false
-    if (username.value === 'admin' && password.value === 'admin') {
+
+    const matchedUser = users.find(
+      (u) =>
+        u.username.toLowerCase() === username.value.trim().toLowerCase() &&
+        u.password === password.value
+    )
+
+    if (matchedUser) {
+      const storage = remember.value ? localStorage : sessionStorage
+      storage.setItem('currentUser', JSON.stringify({
+        username: matchedUser.username,
+        role: matchedUser.role,
+        divisi: matchedUser.divisi,
+      }))
+
       router.push('/dashboard')
     } else {
-      alert('Username atau Password Salah')
+      errorMsg.value = 'Username atau Password Salah'
+      alert(errorMsg.value)
     }
   }, 1500)
 }
@@ -193,6 +214,11 @@ onMounted(() => {
                 </label>
                 <a href="#" class="text-sm font-semibold text-[#11212D] hover:text-[#253745] transition">Lupa Password?</a>
               </div>
+
+              <!-- Error Message -->
+              <p v-if="errorMsg" class="text-sm text-red-600 font-semibold text-center">
+                {{ errorMsg }}
+              </p>
 
               <!-- Submit -->
               <button
