@@ -23,6 +23,25 @@ export const ROUTE_MAP = {
   'Penjadwalan Shift':      '/manajemen-absensi/penjadwalan-shift',
   'Pengajuan Cuti & Izin':  '/manajemen-absensi/pengajuan-cuti-izin',
   'Log Lembur':             '/manajemen-absensi/log-lembur',
+
+  // ── Profil Pegawai ───────────────────────────────────────
+  'Pegawai Tetap':          '/profil-pegawai/pegawai-tetap',
+  'Pegawai Musiman':        '/profil-pegawai/pegawai-musiman',
+  'BHL':                    '/profil-pegawai/bhl',
+  'Struktur Organisasi':    '/profil-pegawai/struktur-organisasi',
+  // ── Penggajian ─────────────────────────────────────────
+  'Proses Gaji':            '/penggajian/proses-gaji',
+  'Upah Harian':            '/penggajian/upah-harian',
+  'Insentif':               '/penggajian/insentif',
+  'Slip Gaji':               '/penggajian/slip-gaji',
+  // ── Keselamatan Kerja ───────────────────────────────────
+  'Laporan Insiden':        '/keselamatan-kerja/laporan-insiden',
+  'Medical Check Up':       '/keselamatan-kerja/medical-check-up',    
+  'Inventaris APD':         '/keselamatan-kerja/inventaris-apd',
+  // ── Rekrutmen ─────────────────────────────────
+  'Lowongan Aktif':         '/rekrutmen/lowongan-aktif',
+  'Database Pelamar':       '/rekrutmen/database-pelamar',
+  // ── Serikat Pekerja ─────────────────────────────────────
 }
 
 export const MENUS = [
