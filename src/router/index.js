@@ -27,7 +27,7 @@ import StrukturOrganisasi from '@/profilpegawai/StrukturOrganisasi.vue'
 import ProsesGaji from '@/penggajian/ProsesGaji.vue'
 import UpahHarian from '@/penggajian/UpahHarian.vue'
 import Insentif   from '@/penggajian/Insentif.vue'
-import SlipGaji   from '@/penggajian/SlipGajji.vue'
+import SlipGaji   from '@/penggajian/SlipGaji.vue'
 
 // ── Keselamatan Kerja ───────────────────────────────────
 import LaporanInsiden from '@/keselamatankerja/LaporanInsiden.vue'

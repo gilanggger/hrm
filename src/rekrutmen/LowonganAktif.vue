@@ -17,7 +17,7 @@ import {
 } from 'lucide-vue-next'
 
 import AppLayout from '@/components/AppLayout.vue'
-import { useLowonganAktif } from '@/composables/useLowonganAktif'
+import { useLowonganAktif } from '@/composables/useLowonganAktif.js'
 
 const {
   loading, error, updating,
